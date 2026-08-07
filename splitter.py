@@ -1,120 +1,110 @@
-import numpy as np
+"""Analyze splitter channel balance and LO/mixer beat-frequency consistency."""
+from __future__ import annotations
+
+import argparse
+
 import matplotlib.pyplot as plt
+import numpy as np
 
-def splitter(data):
-    x = data[:,0]
-    ch1 = data[:,1]
-    ch2 = data[:,2]
-    ch3 = data[:,3]
-    ch4 = data[:,4]
-    ref = data[:,5]
+from utils import load_measurement, plot_vs_control_voltage
 
+
+def splitter(data: np.ndarray):
+    """Split a splitter measurement file into its column components."""
+    x = data[:, 0]
+    ch1, ch2, ch3, ch4, ref = (data[:, i] for i in range(1, 6))
     return x, ch1, ch2, ch3, ch4, ref
-    # plt.plot(x, ch1, label='ch1', color='red')
-    # plt.plot(x, ch2, label='ch2', color='blue')
-    # plt.plot(x, ch3, label='ch3', color='green')
-    # plt.plot(x, ch4, label='ch4', color='black')
-    # plt.legend()
-    # plt.show()
-
-def lo(LO, mixer1, mixer2, mixer3, mixer4):
-    freq = LO[:, 1]
-    frequency1 = abs(abs(mixer1[:, 2] - freq*2) - abs(mixer1[:, 1]))
-    Freq1 = abs(mixer1[:, 1])
-    error1 = np.mean(frequency1 / Freq1)
-    frequency2 = abs(abs(mixer2[:, 2] - freq*2) - abs(mixer2[:, 1]))
-    Freq2 = abs(mixer2[:, 1])
-    error2 = np.mean(frequency2 / Freq2)
-    frequency3 = abs(abs(mixer3[:, 2] - freq*2) - abs(mixer3[:, 1]))
-    Freq3 = abs(mixer3[:, 1])
-    error3 = np.mean(frequency3 / Freq3)
-    frequency4 = abs(abs(mixer4[:, 2] - freq*2) - abs(mixer4[:, 1]))
-    Freq4 = abs(mixer4[:, 1])
-    error4 = np.mean(frequency4 / Freq4)
-    amplitude1 = mixer1[:, 3]
-    amplitude2 = mixer2[:, 3]
-    amplitude3 = mixer3[:, 3]
-    amplitude4 = mixer4[:, 3]
-    return frequency1, frequency2, frequency3, frequency4, amplitude1, amplitude2, amplitude3, amplitude4, error1, error2, error3, error4
 
 
+def lo(lo_data: np.ndarray, mixer1: np.ndarray, mixer2: np.ndarray, mixer3: np.ndarray, mixer4: np.ndarray):
+    """Compute beat-note frequency/amplitude for four mixer channels against the LO.
 
-if __name__ == '__main__':
+    Returns per-channel beat frequency, amplitude, and the mean relative error
+    between the calculated and measured beat frequency.
+    """
+    freq = lo_data[:, 1]
+    frequencies, amplitudes, errors = [], [], []
+    for mixer in (mixer1, mixer2, mixer3, mixer4):
+        beat = abs(abs(mixer[:, 2] - freq * 2) - abs(mixer[:, 1]))
+        measured = abs(mixer[:, 1])
+        frequencies.append(beat)
+        amplitudes.append(mixer[:, 3])
+        errors.append(np.mean(beat / measured))
+    return frequencies, amplitudes, errors
 
-    # sp = np.loadtxt('splitter_240708.txt')
-    sp = np.loadtxt('splitter_240710.txt')
-    LO = np.loadtxt('LO_240704.txt')
-    mixer478_ch1 = np.loadtxt('mixer478_ch1_240708.txt')
-    mixer479_ch1 = np.loadtxt('mixer479_ch1_240708.txt')
-    mixer478_ch2 = np.loadtxt('mixer478_ch2_240708.txt')
-    mixer479_ch2 = np.loadtxt('mixer479_ch2_240708.txt')
-    control_voltage = LO[:, 0]
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--splitter-file", default="splitter_240710.txt")
+    parser.add_argument("--lo-file", default="LO_240704.txt")
+    parser.add_argument("--mixer478-ch1", default="mixer478_ch1_240708.txt")
+    parser.add_argument("--mixer479-ch1", default="mixer479_ch1_240708.txt")
+    parser.add_argument("--mixer478-ch2", default="mixer478_ch2_240708.txt")
+    parser.add_argument("--mixer479-ch2", default="mixer479_ch2_240708.txt")
+    parser.add_argument(
+        "--diagnostics", action="store_true",
+        help="Also plot per-channel splitter amplitude, mixer amplitude, and beat-frequency error",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    sp = load_measurement(args.splitter_file)
+    lo_data = load_measurement(args.lo_file)
+    mixer478_ch1 = load_measurement(args.mixer478_ch1)
+    mixer479_ch1 = load_measurement(args.mixer479_ch1)
+    mixer478_ch2 = load_measurement(args.mixer478_ch2)
+    mixer479_ch2 = load_measurement(args.mixer479_ch2)
+
+    control_voltage = lo_data[:, 0]
     x, ch1, ch2, ch3, ch4, ref = splitter(sp)
-    
-    frequency1, frequency2, frequency3, frequency4, amplitude1, amplitude2, amplitude3, amplitude4, error1, error2, error3, error4 = lo(LO, mixer478_ch1, mixer479_ch1, mixer478_ch2, mixer479_ch2)
+    channel_labels = ["478-ch1", "479-ch1", "478-ch2", "479-ch2"]
+    colors = ["r", "g", "b", "k"]
 
-    # # plot splitter
-    # plt.figure(1)
-    # plt.plot(x, ch1, 'r')
-    # plt.plot(x, ch2, 'g')
-    # plt.plot(x, ch3, 'b')
-    # plt.plot(x, ch4, 'k')
-    # plt.xlabel("Control Voltage (V)")
-    # plt.ylabel("Splitter Channel Amplitude [dBm]")
-    # plt.title("Splitter Channel Amplitude vs Control Voltage")
-    # plt.legend(["ch1", "ch2", "ch3", "ch4"])
-    # plt.tight_layout()
+    frequencies, amplitudes, errors = lo(
+        lo_data, mixer478_ch1, mixer479_ch1, mixer478_ch2, mixer479_ch2
+    )
 
-    # plt.figure(2)
-    # plt.plot(control_voltage, amplitude1, 'r')
-    # plt.plot(control_voltage, amplitude2, 'g')
-    # plt.plot(control_voltage, amplitude3, 'b')
-    # plt.plot(control_voltage, amplitude4, 'k')
-    # plt.xlabel("Control Voltage (V)")
-    # plt.ylabel("Amplitude [dBm]")
-    # plt.title("Amplitude vs Control Voltage")
-    # plt.legend(["478-ch1", "479-ch1", "478-ch2", "479-ch2"])
-    # plt.tight_layout()
+    if args.diagnostics:
+        plt.figure("splitter-channels")
+        plot_vs_control_voltage(
+            x, [ch1, ch2, ch3, ch4], ["ch1", "ch2", "ch3", "ch4"], colors,
+            ylabel="Splitter Channel Amplitude (dBm)",
+            title="Splitter Channel Amplitude vs Control Voltage",
+        )
 
-    # # the error of frequency of the beating signal from LO and mixer
-    # plt.figure(3)
-    # plt.plot(control_voltage, frequency1, 'r')
-    # plt.plot(control_voltage, frequency2, 'g')
-    # plt.plot(control_voltage, frequency3, 'b')
-    # plt.plot(control_voltage, frequency4, 'k')
-    # plt.xlabel("Control Voltage (V)")
-    # plt.ylabel("Frequency (GHz)")
-    # plt.title("Beating signal frequency vs Control Voltage")
-    # plt.legend(["478-ch1", "479-ch1", "478-ch2", "479-ch2"])
-    # print("The error of calculation and measurement is:", error1, error2, error3, error4)
-    # plt.tight_layout()
+        plt.figure("mixer-amplitude")
+        plot_vs_control_voltage(
+            control_voltage, amplitudes, channel_labels, colors,
+            ylabel="Amplitude (dBm)", title="Amplitude vs Control Voltage",
+        )
 
-    # inversion loss
-    plt.figure(1)
+        plt.figure("beat-frequency")
+        plot_vs_control_voltage(
+            control_voltage, frequencies, channel_labels, colors,
+            ylabel="Frequency (GHz)", title="Beating Signal Frequency vs Control Voltage",
+        )
+        print("Mean relative error between calculated and measured beat frequency:")
+        for label, error in zip(channel_labels, errors):
+            print(f"  {label}: {error:.3g}")
+
+    plt.figure("inversion-loss")
     plt.subplot(211)
-    plt.plot(x, ref - ch1, 'r')
-    plt.plot(x, ref - ch2, 'g')
-    plt.plot(x, ref - ch3, 'b')
-    plt.plot(x, ref - ch4, 'k')
-
-    plt.xlabel("Control Voltage (V)")
-    plt.ylabel("Inversion Loss [dB]")
-    plt.title("Inversion Loss vs Control Voltage")
-    plt.legend(["ch1", "ch2", "ch3", "ch4"])
-    plt.tight_layout()
-
-    # the ratio of the amplitude from every channel
+    plot_vs_control_voltage(
+        x, [ref - ch1, ref - ch2, ref - ch3, ref - ch4], ["ch1", "ch2", "ch3", "ch4"], colors,
+        ylabel="Inversion Loss (dB)", title="Inversion Loss vs Control Voltage",
+    )
     plt.subplot(212)
-    plt.plot(x, ch1 / ref, 'r')
-    plt.plot(x, ch2 / ref, 'g')
-    plt.plot(x, ch3 / ref, 'b')
-    plt.plot(x, ch4 / ref, 'k')
-    plt.xlabel("Control Voltage (V)")
-    plt.ylabel("Amplitude Ratio")
-    plt.title("Amplitude Ratio vs Control Voltage")
-    plt.legend(["ch1", "ch2", "ch3", "ch4"])
-    plt.tight_layout()
+    plot_vs_control_voltage(
+        x, [ch1 / ref, ch2 / ref, ch3 / ref, ch4 / ref], ["ch1", "ch2", "ch3", "ch4"], colors,
+        ylabel="Amplitude Ratio", title="Amplitude Ratio vs Control Voltage",
+    )
 
     plt.show()
 
+
+if __name__ == "__main__":
+    main()
 

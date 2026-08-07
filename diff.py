@@ -1,44 +1,67 @@
-import numpy as np
+"""Compare beat-note frequency and amplitude of two mixers against the LO."""
+from __future__ import annotations
+
+import argparse
+
 import matplotlib.pyplot as plt
 
-data = np.loadtxt("LO_240704.txt")
-mixer = np.loadtxt("mixer478_ch1_240704.txt")
-mixer1 = np.loadtxt("mixer479_ch1_240704.txt")
-LO = 26.938 # GHz
-control_voltage = data[:, 0]
-frequency = data[:, 1]
-frequency1 = abs(abs(LO - frequency*2) - abs(mixer[:, 1]))
-Freq1 = abs(mixer[:, 1])
-frequency2 = abs(abs(LO - frequency*2) - abs(mixer1[:, 1]))
-Freq2 = abs(mixer1[:, 1])
-amplitude1 = mixer[:, 2]
-amplitude2 = mixer1[:, 2]
-# 3 plots, two for frequency and one for amplitude
-plt.figure(1)
-plt.subplot(211)
-plt.plot(control_voltage, frequency1, 'r')
-plt.plot(control_voltage, frequency2, 'g')
-plt.xlabel("Control Voltage (V)")
-plt.ylabel("Frequency (GHz)")
-plt.title("Frequency vs Control Voltage")
-plt.legend(["478-1", "479-2"])
+from utils import load_measurement, plot_vs_control_voltage
 
-plt.subplot(212)
-plt.plot(control_voltage, Freq1, 'r')
-plt.plot(control_voltage, Freq2, 'g')
-plt.xlabel("Control Voltage (V)")
-plt.ylabel("Frequency (GHz)")
-plt.title("Frequency vs Control Voltage")
-plt.legend(["478-1", "479-2"])
-plt.tight_layout()
+LO_FREQUENCY_GHZ = 26.938
 
-plt.figure(2)
-plt.plot(control_voltage, amplitude1, 'r')
-plt.plot(control_voltage, amplitude2, 'g')
-plt.xlabel("Control Voltage (V)")
-plt.ylabel("Amplitude (dBm)")
-plt.title("Amplitude vs Control Voltage")
-plt.legend(["478-1", "479-2"])
-plt.tight_layout()
 
-plt.show()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--lo-file", default="LO_240704.txt")
+    parser.add_argument("--mixer1-file", default="mixer478_ch1_240704.txt")
+    parser.add_argument("--mixer2-file", default="mixer479_ch1_240704.txt")
+    parser.add_argument(
+        "--lo-frequency", type=float, default=LO_FREQUENCY_GHZ,
+        help="Local oscillator frequency in GHz",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    lo_data = load_measurement(args.lo_file)
+    mixer1 = load_measurement(args.mixer1_file)
+    mixer2 = load_measurement(args.mixer2_file)
+
+    control_voltage = lo_data[:, 0]
+    frequency = lo_data[:, 1]
+
+    beat_frequency1 = abs(abs(args.lo_frequency - frequency * 2) - abs(mixer1[:, 1]))
+    beat_frequency2 = abs(abs(args.lo_frequency - frequency * 2) - abs(mixer2[:, 1]))
+    measured_frequency1 = abs(mixer1[:, 1])
+    measured_frequency2 = abs(mixer2[:, 1])
+    amplitude1 = mixer1[:, 2]
+    amplitude2 = mixer2[:, 2]
+
+    labels = ["478-1", "479-2"]
+    colors = ["r", "g"]
+
+    plt.figure(1)
+    plt.subplot(211)
+    plot_vs_control_voltage(
+        control_voltage, [beat_frequency1, beat_frequency2], labels, colors,
+        ylabel="Frequency (GHz)", title="Beat Frequency vs Control Voltage",
+    )
+    plt.subplot(212)
+    plot_vs_control_voltage(
+        control_voltage, [measured_frequency1, measured_frequency2], labels, colors,
+        ylabel="Frequency (GHz)", title="Mixer Frequency vs Control Voltage",
+    )
+
+    plt.figure(2)
+    plot_vs_control_voltage(
+        control_voltage, [amplitude1, amplitude2], labels, colors,
+        ylabel="Amplitude (dBm)", title="Amplitude vs Control Voltage",
+    )
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
